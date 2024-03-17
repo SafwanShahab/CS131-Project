@@ -29,7 +29,7 @@ import time
 from geopy.geocoders import Nominatim
 from datetime import datetime
 from jetson_inference import detectNet
-from jetson_utils import videoSource, videoOutput, Log
+from jetson_utils import videoSource, videoOutput,saveImage, Log
 
 
 prev_time = time.time()
@@ -47,16 +47,17 @@ def email_alert(intruders, timestamp, location):
   yag = yagmail.SMTP(user='jetsonsecsys@gmail.com', password='crhboaphzpdiuiph')
   #compse the message
   subject = 'Interuder Alert'
+  image_path = f"my_image.jpg"
   body = f'''
   One or more intruders were detected at {location}.
 
   Report:
   - No of trespassers: {intruders}
   - Timestamp: {timestamp}
-  A photo would be nice!
+  Please see attached photo:
   '''
   to_email = 'lmcgu004@ucr.edu'
-  yag.send(to=to_email, subject=subject, contents=body)
+  yag.send(to=to_email, subject=subject, contents=body, attachments=image_path)
   yag.close()
 
 def text_alert():
@@ -115,6 +116,11 @@ net = detectNet(args.network, sys.argv, args.threshold)
 #                 threshold=args.threshold)
 
 # process frames until EOS or the user exits
+filename = 'image.jpg'
+
+output_uri = f'file://{filename}'
+
+
 while True:
     # capture the next image
     img = input.Capture()
@@ -124,20 +130,23 @@ while True:
 
     # detect objects in the image (with overlay)
     detections = net.Detect(img, overlay=args.overlay)
-  
+
     # print the detections
     print("detected {:d} objects in image".format(len(detections)))
     people = []
     for detection in detections:
       if(detection.ClassID == 1):
         people.append(detection.ClassID)
+        saveImage(f"my_image.jpg", img)
     if(time_check(time.time()) is True and len(people) > 0):
+      videoOutput(output_uri, img)
       with open('output.txt', 'a') as f:
         num_people = len(people)
         #Write the number of people in the image to the output file
         if(num_people > 1):
           email_alert(num_people, datetime.now(), str(address))
           text_alert()
+          videoOutput(output_uri, img)
           last_alert = time.time()
           f.write(str(num_people) + " people were detected in the secure area.\n")
           #Time and date
@@ -154,11 +163,12 @@ while True:
           f.write("Longitude: " + str(longitude) + "\n")
           f.write("-----------------------------------------------------------------------------\n")
           f.write("                                                                             \n")
-  
-  
+
+
         elif(num_people == 1):
           email_alert(num_people, datetime.now(), str(address))
           text_alert()
+          saveImage(f"my_image.jpg", img)
           last_alert = time.time()
           f.write(str(num_people) + " person was detected in the secure area.\n")
           #Time and date
